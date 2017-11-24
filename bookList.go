@@ -100,7 +100,9 @@ func delBook(w http.ResponseWriter, r *http.Request){
 	} else{
 		_, flag:=bookList[bookId]
 		if flag{
+			access.Lock()
 			delete(bookList, bookId)
+			access.Unlock()
 			json.NewEncoder(w).Encode(Respond{true, "Book deleted!", nil})
 		}else{
 			json.NewEncoder(w).Encode(Respond{false, "Invalid book id!", nil})
