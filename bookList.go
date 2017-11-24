@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	//"fmt"
 	"github.com/bmizerany/pat"
 	"net/http"
 	"log"
@@ -16,6 +16,12 @@ type Book struct {
 	Id int
 }
 
+type Respond struct{
+	Ok bool
+	Msg string
+	Info []Book
+}
+
 var (
 	bookList=make(map[int]Book)
 	access sync.Mutex
@@ -28,36 +34,43 @@ func addBook(w http.ResponseWriter, r *http.Request){
 	var newBook Book
 	err:=decoder.Decode(&newBook)
 	if err != nil {
-		fmt.Println(err)
+		//fmt.Println(err)
 	} else{
 		access.Lock()
 		bookCnt++
 		newBook.Id=bookCnt
 		bookList[bookCnt]=newBook
 		access.Unlock()
-		fmt.Println(bookList[bookCnt])
-		fmt.Fprintf(w, "Book Inserted!\n")
+		var Books []Book
+		Books=append(Books, bookList[bookCnt])
+		json.NewEncoder(w).Encode(Respond{true, "Book Inserted!", Books})
+		return
 	}
+	json.NewEncoder(w).Encode(Respond{false, "Book not Inserted!", nil})
 }
 
 func showAllBook(w http.ResponseWriter, r *http.Request){
+	var Books []Book
 	for _, value:=range bookList{
-		fmt.Fprintf(w, "Name: %s, Author: %s\n", value.Name, value.Author, )
+		Books=append(Books, value)
 	}
+	json.NewEncoder(w).Encode(Respond{true, "Book List", Books})
 }
 
 func showOneBook(w http.ResponseWriter, r *http.Request){
 	bookId, err :=strconv.Atoi(r.URL.Query().Get(":bookId"))
 	if err!=nil{
-		fmt.Fprintf(w, "Invalid format!\n")
+		//fmt.Fprintf(w, "Invalid format!\n")
 	} else{
 		value, flag:=bookList[bookId]
 		if flag{
-			fmt.Fprintf(w, "Name: %s, Author: %s\n", value.Name, value.Author)
-		}else{
-			fmt.Fprintf(w,"Book not found for that id!\n")
+			var Books []Book
+			Books=append(Books, value)
+			json.NewEncoder(w).Encode(Respond{true, "Book found", Books})
+			return
 		}
 	}
+	json.NewEncoder(w).Encode(Respond{false, "No book found for that id", nil})
 }
 
 func updateBook(w http.ResponseWriter, r *http.Request){
@@ -66,14 +79,16 @@ func updateBook(w http.ResponseWriter, r *http.Request){
 	var upBook Book
 	err:=decoder.Decode(&upBook)
 	if err != nil {
-		fmt.Println(err)
+		json.NewEncoder(w).Encode(Respond{false, "Error", nil})
 	} else{
 		_, flag:=bookList[upBook.Id]
 		if flag{
+			access.Lock()
 			bookList[upBook.Id]=upBook
-			fmt.Fprintf(w, "Book updated\n")
-		} else{
-			fmt.Fprintf(w, "Book not found for that id\n")
+			json.NewEncoder(w).Encode(Respond{true, "Book updated!", nil})
+			access.Unlock()
+		}else{
+			json.NewEncoder(w).Encode(Respond{false, "Invalid book id!", nil})
 		}
 	}
 }
@@ -81,20 +96,16 @@ func updateBook(w http.ResponseWriter, r *http.Request){
 func delBook(w http.ResponseWriter, r *http.Request){
 	bookId, err :=strconv.Atoi(r.URL.Query().Get(":bookId"))
 	if err!=nil{
-		fmt.Fprintf(w, "Invalid format!\n")
+		json.NewEncoder(w).Encode(Respond{false, "Error", nil})
 	} else{
 		_, flag:=bookList[bookId]
 		if flag{
 			delete(bookList, bookId)
-			fmt.Fprintf(w, "Book deleted\n")
+			json.NewEncoder(w).Encode(Respond{true, "Book deleted!", nil})
 		}else{
-			fmt.Fprintf(w,"Book not found for that id!\n")
+			json.NewEncoder(w).Encode(Respond{false, "Invalid book id!", nil})
 		}
 	}
-}
-
-func nothing(w http.ResponseWriter, r *http.Request){
-	fmt.Fprintf(w, "Nothing\n")
 }
 
 func main() {
