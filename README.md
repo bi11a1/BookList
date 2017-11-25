@@ -1,4 +1,3 @@
-#Intern project at Appscode
 Project: Book list
 Feature:
   1) Add new book
