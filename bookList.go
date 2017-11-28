@@ -8,6 +8,7 @@ import (
 	"sync"
 	"strconv"
 	"time"
+	"fmt"
 )
 
 //-----------------------------Book list---------------------------------
@@ -31,6 +32,11 @@ var (
 )
 
 func addBook(w http.ResponseWriter, r *http.Request){
+	if isLoggedIn(w, r)==false{
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
+		return
+	}
 	decoder:=json.NewDecoder(r.Body)
 	defer r.Body.Close()
 	var newBook Book
@@ -52,6 +58,11 @@ func addBook(w http.ResponseWriter, r *http.Request){
 }
 
 func showAllBook(w http.ResponseWriter, r *http.Request){
+	if isLoggedIn(w, r)==false{
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
+		return
+	}
 	var Books []Book
 	for _, value:=range bookList{
 		Books=append(Books, value)
@@ -61,6 +72,11 @@ func showAllBook(w http.ResponseWriter, r *http.Request){
 }
 
 func showOneBook(w http.ResponseWriter, r *http.Request){
+	if isLoggedIn(w, r)==false{
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
+		return
+	}
 	bookId, err :=strconv.Atoi(r.URL.Query().Get(":bookId"))
 	if err!=nil{
 		w.WriteHeader(http.StatusBadRequest)
@@ -80,6 +96,11 @@ func showOneBook(w http.ResponseWriter, r *http.Request){
 }
 
 func updateBook(w http.ResponseWriter, r *http.Request){
+	if isLoggedIn(w, r)==false{
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
+		return
+	}
 	decoder:=json.NewDecoder(r.Body)
 	defer r.Body.Close()
 	var upBook Book
@@ -104,6 +125,11 @@ func updateBook(w http.ResponseWriter, r *http.Request){
 }
 
 func delBook(w http.ResponseWriter, r *http.Request){
+	if isLoggedIn(w, r)==false{
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
+		return
+	}
 	bookId, err :=strconv.Atoi(r.URL.Query().Get(":bookId"))
 	if err!=nil{
 		w.WriteHeader(http.StatusBadRequest)
@@ -136,75 +162,86 @@ var userList=make(map[string]User)
 type UserResponse struct {
 	Ok bool
 	Msg string
-	Info User
+	Info string
+}
+
+func isLoggedIn(w http.ResponseWriter, r *http.Request) bool {
+	_, err:=r.Cookie("User")
+	if err==nil{
+		return true
+	}
+	return false
 }
 
 func regUser(w http.ResponseWriter, r *http.Request){
-	logoutUser(w, r)
 	decoder:=json.NewDecoder(r.Body)
 	defer r.Body.Close()
 	var newUser User
 	err:=decoder.Decode(&newUser)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(UserResponse{false, "Invalid request!", newUser})
+		json.NewEncoder(w).Encode(UserResponse{false, "Invalid request!", ""})
 	} else {
 		access.Lock()
 		if _,found:=userList[newUser.UserName]; found==true {
 			w.WriteHeader(http.StatusNotAcceptable)
-			json.NewEncoder(w).Encode(UserResponse{false, "User already exists", newUser})
+			json.NewEncoder(w).Encode(UserResponse{false, "User already exists", newUser.UserName})
 		}else if newUser.UserName=="" || newUser.Password=="" || newUser.Name==""{
 			w.WriteHeader(http.StatusNotAcceptable)
-			json.NewEncoder(w).Encode(UserResponse{false, "Invalid user info", newUser})
+			json.NewEncoder(w).Encode(UserResponse{false, "Invalid user info", ""})
 		}else{
 			userList[newUser.UserName]=newUser
 			w.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(w).Encode(UserResponse{true, "Registered new user", newUser})
+			json.NewEncoder(w).Encode(UserResponse{true, "Registered new user", newUser.UserName})
 		}
 		access.Unlock()
 	}
 }
 
 func loginUser(w http.ResponseWriter, r *http.Request){
-	cookie, err:=r.Cookie("User")
+	//cookie, err:=r.Cookie("User")
 	var curUser User
-	if err==nil{
+	/*if err==nil{
 		curUser.UserName=cookie.Value
 		w.WriteHeader(http.StatusNotAcceptable)
-		json.NewEncoder(w).Encode(UserResponse{false, "Already logged in", curUser})
+		json.NewEncoder(w).Encode(UserResponse{true, "Already logged in", curUser})
+		return
+	}*/
+	if isLoggedIn(w, r)==true{
+		w.WriteHeader(http.StatusNotAcceptable)
+		json.NewEncoder(w).Encode(UserResponse{false, "Already logged in", ""})
 		return
 	}
 	decoder:=json.NewDecoder(r.Body)
 	defer r.Body.Close()
-	err = decoder.Decode(&curUser)
+	err := decoder.Decode(&curUser)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(UserResponse{false, "Invalid request!", curUser})
+		json.NewEncoder(w).Encode(UserResponse{false, "Invalid request!", ""})
 	} else {
 		val, found:=userList[curUser.UserName]
 		if found==true && val.Password==curUser.Password {
 			cookie:=http.Cookie{Name: "User", Value:curUser.UserName, Path:"/"}
 			http.SetCookie(w, &cookie)
 			w.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(w).Encode(UserResponse{true, "Successfully logged in", curUser})
+			json.NewEncoder(w).Encode(UserResponse{true, "Successfully logged in", curUser.UserName})
 		}else{
 			w.WriteHeader(http.StatusNotAcceptable)
-			json.NewEncoder(w).Encode(UserResponse{false, "Invalid username or password", curUser})
+			json.NewEncoder(w).Encode(UserResponse{false, "Invalid username or password", curUser.UserName})
 		}
 	}
 }
 
 func logoutUser(w http.ResponseWriter, r *http.Request){
 	_, err:=r.Cookie("User")
-	var curUser User
 	if err==nil{
 		cookie:=http.Cookie{Name:"User", Value:"", Path:"/", Expires: time.Now()}
 		http.SetCookie(w, &cookie)
 		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(UserResponse{true, "Logged out", curUser})
+		json.NewEncoder(w).Encode(UserResponse{true, "Logged out", ""})
 	}else{
 		w.WriteHeader(http.StatusNotAcceptable)
-		json.NewEncoder(w).Encode(UserResponse{false, "No active user found", curUser})
+		json.NewEncoder(w).Encode(UserResponse{false, "No active user found", ""})
 	}
 }
 
