@@ -1,149 +1,148 @@
 package main
 
 import (
-	"github.com/bmizerany/pat"
-	"net/http"
-	"log"
 	"encoding/json"
-	"sync"
+	"log"
+	"net/http"
 	"strconv"
+	"sync"
 	"time"
-	"fmt"
+
+	"github.com/bmizerany/pat"
 )
 
 //-----------------------------Book list---------------------------------
 
 type Book struct {
-	Name string
+	Name   string
 	Author string
-	Id int
+	Id     int
 }
 
-type BookResponse struct{
-	Ok bool
-	Msg string
+type BookResponse struct {
+	Ok   bool
+	Msg  string
 	Info []Book
 }
 
 var (
-	bookList=make(map[int]Book)
-	access sync.Mutex
-	bookCnt int
+	bookList = make(map[int]Book)
+	access   sync.Mutex
+	bookCnt  int
 )
 
-func addBook(w http.ResponseWriter, r *http.Request){
-	if isLoggedIn(w, r)==false{
+func addBook(w http.ResponseWriter, r *http.Request) {
+	if isLoggedIn(w, r) == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
 		return
 	}
-	decoder:=json.NewDecoder(r.Body)
+	decoder := json.NewDecoder(r.Body)
 	defer r.Body.Close()
 	var newBook Book
-	err:=decoder.Decode(&newBook)
+	err := decoder.Decode(&newBook)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(BookResponse{false, "Book not Inserted!", nil})
-	} else{
+	} else {
 		access.Lock()
 		bookCnt++
-		newBook.Id=bookCnt
-		bookList[bookCnt]=newBook
+		newBook.Id = bookCnt
+		bookList[bookCnt] = newBook
 		access.Unlock()
 		var Books []Book
-		Books=append(Books, bookList[bookCnt])
+		Books = append(Books, bookList[bookCnt])
 		w.WriteHeader(http.StatusAccepted)
 		json.NewEncoder(w).Encode(BookResponse{true, "Book Inserted!", Books})
 	}
 }
 
-func showAllBook(w http.ResponseWriter, r *http.Request){
-	if isLoggedIn(w, r)==false{
+func showAllBook(w http.ResponseWriter, r *http.Request) {
+	if isLoggedIn(w, r) == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
 		return
 	}
 	var Books []Book
-	for _, value:=range bookList{
-		Books=append(Books, value)
+	for _, value := range bookList {
+		Books = append(Books, value)
 	}
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(BookResponse{true, "Book List", Books})
 }
 
-func showOneBook(w http.ResponseWriter, r *http.Request){
-	if isLoggedIn(w, r)==false{
+func showOneBook(w http.ResponseWriter, r *http.Request) {
+	if isLoggedIn(w, r) == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
 		return
 	}
-	bookId, err :=strconv.Atoi(r.URL.Query().Get(":bookId"))
-	if err!=nil{
+	bookId, err := strconv.Atoi(r.URL.Query().Get(":bookId"))
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(BookResponse{false, "Book not Inserted!", nil})
-	} else{
-		value, flag:=bookList[bookId]
-		if flag{
+	} else {
+		value, flag := bookList[bookId]
+		if flag {
 			var Books []Book
-			Books=append(Books, value)
+			Books = append(Books, value)
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(BookResponse{true, "Book found", Books})
-		}else{
-			w.WriteHeader(http.StatusNoContent)
+		} else {
+			w.WriteHeader(http.StatusNotAcceptable)
 			json.NewEncoder(w).Encode(BookResponse{false, "No book found for that id", nil})
 		}
 	}
 }
 
-func updateBook(w http.ResponseWriter, r *http.Request){
-	if isLoggedIn(w, r)==false{
+func updateBook(w http.ResponseWriter, r *http.Request) {
+	if isLoggedIn(w, r) == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
 		return
 	}
-	decoder:=json.NewDecoder(r.Body)
+	decoder := json.NewDecoder(r.Body)
 	defer r.Body.Close()
 	var upBook Book
-	err:=decoder.Decode(&upBook)
+	err := decoder.Decode(&upBook)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(BookResponse{false, "Error", nil})
-	} else{
-		_, flag:=bookList[upBook.Id]
-		if flag{
+	} else {
+		_, flag := bookList[upBook.Id]
+		if flag {
 			access.Lock()
-			bookList[upBook.Id]=upBook
+			bookList[upBook.Id] = upBook
 			access.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(BookResponse{true, "Book updated!", nil})
-
-		}else{
-			w.WriteHeader(http.StatusNoContent)
+		} else {
+			w.WriteHeader(http.StatusNotAcceptable)
 			json.NewEncoder(w).Encode(BookResponse{false, "Invalid book id!", nil})
 		}
 	}
 }
 
-func delBook(w http.ResponseWriter, r *http.Request){
-	if isLoggedIn(w, r)==false{
+func delBook(w http.ResponseWriter, r *http.Request) {
+	if isLoggedIn(w, r) == false {
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
 		return
 	}
-	bookId, err :=strconv.Atoi(r.URL.Query().Get(":bookId"))
-	if err!=nil{
+	bookId, err := strconv.Atoi(r.URL.Query().Get(":bookId"))
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(BookResponse{false, "Error", nil})
-	} else{
-		_, flag:=bookList[bookId]
-		if flag{
+	} else {
+		_, flag := bookList[bookId]
+		if flag {
 			access.Lock()
 			delete(bookList, bookId)
 			access.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(BookResponse{true, "Book deleted!", nil})
-		}else{
-			w.WriteHeader(http.StatusNoContent)
+		} else {
+			w.WriteHeader(http.StatusNotAcceptable)
 			json.NewEncoder(w).Encode(BookResponse{false, "Invalid book id!", nil})
 		}
 	}
@@ -152,45 +151,45 @@ func delBook(w http.ResponseWriter, r *http.Request){
 // --------------------------User authentication--------------------------------
 
 type User struct {
-	Name string
+	Name     string
 	UserName string
 	Password string
 }
 
-var userList=make(map[string]User)
+var userList = make(map[string]User)
 
 type UserResponse struct {
-	Ok bool
-	Msg string
+	Ok   bool
+	Msg  string
 	Info string
 }
 
 func isLoggedIn(w http.ResponseWriter, r *http.Request) bool {
-	_, err:=r.Cookie("User")
-	if err==nil{
+	_, err := r.Cookie("User")
+	if err == nil {
 		return true
 	}
 	return false
 }
 
-func regUser(w http.ResponseWriter, r *http.Request){
-	decoder:=json.NewDecoder(r.Body)
+func regUser(w http.ResponseWriter, r *http.Request) {
+	decoder := json.NewDecoder(r.Body)
 	defer r.Body.Close()
 	var newUser User
-	err:=decoder.Decode(&newUser)
+	err := decoder.Decode(&newUser)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(UserResponse{false, "Invalid request!", ""})
 	} else {
 		access.Lock()
-		if _,found:=userList[newUser.UserName]; found==true {
+		if _, found := userList[newUser.UserName]; found == true {
 			w.WriteHeader(http.StatusNotAcceptable)
 			json.NewEncoder(w).Encode(UserResponse{false, "User already exists", newUser.UserName})
-		}else if newUser.UserName=="" || newUser.Password=="" || newUser.Name==""{
+		} else if newUser.UserName == "" || newUser.Password == "" || newUser.Name == "" {
 			w.WriteHeader(http.StatusNotAcceptable)
 			json.NewEncoder(w).Encode(UserResponse{false, "Invalid user info", ""})
-		}else{
-			userList[newUser.UserName]=newUser
+		} else {
+			userList[newUser.UserName] = newUser
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(UserResponse{true, "Registered new user", newUser.UserName})
 		}
@@ -198,54 +197,44 @@ func regUser(w http.ResponseWriter, r *http.Request){
 	}
 }
 
-func loginUser(w http.ResponseWriter, r *http.Request){
-	//cookie, err:=r.Cookie("User")
-	var curUser User
-	/*if err==nil{
-		curUser.UserName=cookie.Value
-		w.WriteHeader(http.StatusNotAcceptable)
-		json.NewEncoder(w).Encode(UserResponse{true, "Already logged in", curUser})
-		return
-	}*/
-	if isLoggedIn(w, r)==true{
+func loginUser(w http.ResponseWriter, r *http.Request) {
+	userName, password, flag :=r.BasicAuth()
+	if isLoggedIn(w, r) == true {
 		w.WriteHeader(http.StatusNotAcceptable)
 		json.NewEncoder(w).Encode(UserResponse{false, "Already logged in", ""})
 		return
 	}
-	decoder:=json.NewDecoder(r.Body)
-	defer r.Body.Close()
-	err := decoder.Decode(&curUser)
-	if err != nil {
+	if flag == false {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(UserResponse{false, "Invalid request!", ""})
 	} else {
-		val, found:=userList[curUser.UserName]
-		if found==true && val.Password==curUser.Password {
-			cookie:=http.Cookie{Name: "User", Value:curUser.UserName, Path:"/"}
+		val, found := userList[userName]
+		if found == true && val.Password == password {
+			cookie := http.Cookie{Name: "User", Value: userName, Path: "/"}
 			http.SetCookie(w, &cookie)
 			w.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(w).Encode(UserResponse{true, "Successfully logged in", curUser.UserName})
-		}else{
+			json.NewEncoder(w).Encode(UserResponse{true, "Successfully logged in", userName})
+		} else {
 			w.WriteHeader(http.StatusNotAcceptable)
-			json.NewEncoder(w).Encode(UserResponse{false, "Invalid username or password", curUser.UserName})
+			json.NewEncoder(w).Encode(UserResponse{false, "Invalid username or password", userName})
 		}
 	}
 }
 
-func logoutUser(w http.ResponseWriter, r *http.Request){
-	_, err:=r.Cookie("User")
-	if err==nil{
-		cookie:=http.Cookie{Name:"User", Value:"", Path:"/", Expires: time.Now()}
+func logoutUser(w http.ResponseWriter, r *http.Request) {
+	_, err := r.Cookie("User")
+	if err == nil {
+		cookie := http.Cookie{Name: "User", Value: "", Path: "/", Expires: time.Now()}
 		http.SetCookie(w, &cookie)
 		w.WriteHeader(http.StatusAccepted)
 		json.NewEncoder(w).Encode(UserResponse{true, "Logged out", ""})
-	}else{
+	} else {
 		w.WriteHeader(http.StatusNotAcceptable)
 		json.NewEncoder(w).Encode(UserResponse{false, "No active user found", ""})
 	}
 }
 
-//----------------------------------------------------------------------------------
+//--------------------------------main function--------------------------------------------------
 
 func main() {
 	m := pat.New()
