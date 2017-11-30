@@ -37,13 +37,14 @@ func addBook(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
 		return
 	}
-	decoder := json.NewDecoder(r.Body)
-	defer r.Body.Close()
 	var newBook Book
-	err := decoder.Decode(&newBook)
+	err := json.NewDecoder(r.Body).Decode(&newBook)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(BookResponse{false, "Book not Inserted!", nil})
+	}else if newBook.Name=="" || newBook.Author=="" {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(BookResponse{false, "Invalid book info!", nil})
 	} else {
 		access.Lock()
 		bookCnt++
@@ -101,10 +102,8 @@ func updateBook(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(BookResponse{false, "Please login first", nil})
 		return
 	}
-	decoder := json.NewDecoder(r.Body)
-	defer r.Body.Close()
 	var upBook Book
-	err := decoder.Decode(&upBook)
+	err := json.NewDecoder(r.Body).Decode(&upBook)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(BookResponse{false, "Error", nil})
@@ -113,9 +112,9 @@ func updateBook(w http.ResponseWriter, r *http.Request) {
 		if flag {
 			access.Lock()
 			bookList[upBook.Id] = upBook
-			access.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(BookResponse{true, "Book updated!", nil})
+			access.Unlock()
 		} else {
 			w.WriteHeader(http.StatusNotAcceptable)
 			json.NewEncoder(w).Encode(BookResponse{false, "Invalid book id!", nil})
@@ -138,9 +137,9 @@ func delBook(w http.ResponseWriter, r *http.Request) {
 		if flag {
 			access.Lock()
 			delete(bookList, bookId)
-			access.Unlock()
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(BookResponse{true, "Book deleted!", nil})
+			access.Unlock()
 		} else {
 			w.WriteHeader(http.StatusNotAcceptable)
 			json.NewEncoder(w).Encode(BookResponse{false, "Invalid book id!", nil})
@@ -173,15 +172,12 @@ func isLoggedIn(w http.ResponseWriter, r *http.Request) bool {
 }
 
 func regUser(w http.ResponseWriter, r *http.Request) {
-	decoder := json.NewDecoder(r.Body)
-	defer r.Body.Close()
 	var newUser User
-	err := decoder.Decode(&newUser)
+	err := json.NewDecoder(r.Body).Decode(&newUser)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(UserResponse{false, "Invalid request!", ""})
 	} else {
-		access.Lock()
 		if _, found := userList[newUser.UserName]; found == true {
 			w.WriteHeader(http.StatusNotAcceptable)
 			json.NewEncoder(w).Encode(UserResponse{false, "User already exists", newUser.UserName})
@@ -189,11 +185,12 @@ func regUser(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotAcceptable)
 			json.NewEncoder(w).Encode(UserResponse{false, "Invalid user info", ""})
 		} else {
+			access.Lock()
 			userList[newUser.UserName] = newUser
 			w.WriteHeader(http.StatusAccepted)
 			json.NewEncoder(w).Encode(UserResponse{true, "Registered new user", newUser.UserName})
+			access.Unlock()
 		}
-		access.Unlock()
 	}
 }
 
