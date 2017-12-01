@@ -11,6 +11,97 @@ import (
 	"github.com/bmizerany/pat"
 )
 
+
+// --------------------------User authentication--------------------------------
+
+type User struct {
+	Name     string
+	UserName string
+	Password string
+}
+
+var userList = make(map[string]User)
+
+type UserResponse struct {
+	Ok   bool
+	Msg  string
+	Info string
+}
+
+func isLoggedIn(w http.ResponseWriter, r *http.Request) bool {
+	cookie, err := r.Cookie("User")
+	if err == nil{
+		_, flag := userList[cookie.Value]
+		return  flag
+	}
+	return false
+}
+
+func regUser(w http.ResponseWriter, r *http.Request) {
+	if isLoggedIn(w, r)==true {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(UserResponse{false, "Please logout to register!", ""})
+		return
+	}
+	var newUser User
+	err := json.NewDecoder(r.Body).Decode(&newUser)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(UserResponse{false, "Invalid request!", ""})
+	} else {
+		if _, found := userList[newUser.UserName]; found == true {
+			w.WriteHeader(http.StatusNotAcceptable)
+			json.NewEncoder(w).Encode(UserResponse{false, "User already exists", newUser.UserName})
+		} else if newUser.UserName == "" || newUser.Password == "" || newUser.Name == "" {
+			w.WriteHeader(http.StatusNotAcceptable)
+			json.NewEncoder(w).Encode(UserResponse{false, "Invalid user info", ""})
+		} else {
+			access.Lock()
+			userList[newUser.UserName] = newUser
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(UserResponse{true, "Registered new user", newUser.UserName})
+			access.Unlock()
+		}
+	}
+}
+
+func loginUser(w http.ResponseWriter, r *http.Request) {
+	userName, password, flag :=r.BasicAuth()
+	if isLoggedIn(w, r) == true {
+		w.WriteHeader(http.StatusNotAcceptable)
+		json.NewEncoder(w).Encode(UserResponse{false, "Already logged in", ""})
+		return
+	}
+	if flag == false {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(UserResponse{false, "Invalid request!", ""})
+	} else {
+		val, found := userList[userName]
+		if found == true && val.Password == password {
+			cookie := http.Cookie{Name: "User", Value: userName, Path: "/"}
+			http.SetCookie(w, &cookie)
+			w.WriteHeader(http.StatusAccepted)
+			json.NewEncoder(w).Encode(UserResponse{true, "Successfully logged in", userName})
+		} else {
+			w.WriteHeader(http.StatusNotAcceptable)
+			json.NewEncoder(w).Encode(UserResponse{false, "Invalid username or password", userName})
+		}
+	}
+}
+
+func logoutUser(w http.ResponseWriter, r *http.Request) {
+	_, err := r.Cookie("User")
+	if err == nil {
+		cookie := http.Cookie{Name: "User", Value: "", Path: "/", Expires: time.Now()}
+		http.SetCookie(w, &cookie)
+		w.WriteHeader(http.StatusAccepted)
+		json.NewEncoder(w).Encode(UserResponse{true, "Logged out", ""})
+	} else {
+		w.WriteHeader(http.StatusNotAcceptable)
+		json.NewEncoder(w).Encode(UserResponse{false, "No active user found", ""})
+	}
+}
+
 //-----------------------------Book list---------------------------------
 
 type Book struct {
@@ -144,90 +235,6 @@ func delBook(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusNotAcceptable)
 			json.NewEncoder(w).Encode(BookResponse{false, "Invalid book id!", nil})
 		}
-	}
-}
-
-// --------------------------User authentication--------------------------------
-
-type User struct {
-	Name     string
-	UserName string
-	Password string
-}
-
-var userList = make(map[string]User)
-
-type UserResponse struct {
-	Ok   bool
-	Msg  string
-	Info string
-}
-
-func isLoggedIn(w http.ResponseWriter, r *http.Request) bool {
-	_, err := r.Cookie("User")
-	if err == nil {
-		return true
-	}
-	return false
-}
-
-func regUser(w http.ResponseWriter, r *http.Request) {
-	var newUser User
-	err := json.NewDecoder(r.Body).Decode(&newUser)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(UserResponse{false, "Invalid request!", ""})
-	} else {
-		if _, found := userList[newUser.UserName]; found == true {
-			w.WriteHeader(http.StatusNotAcceptable)
-			json.NewEncoder(w).Encode(UserResponse{false, "User already exists", newUser.UserName})
-		} else if newUser.UserName == "" || newUser.Password == "" || newUser.Name == "" {
-			w.WriteHeader(http.StatusNotAcceptable)
-			json.NewEncoder(w).Encode(UserResponse{false, "Invalid user info", ""})
-		} else {
-			access.Lock()
-			userList[newUser.UserName] = newUser
-			w.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(w).Encode(UserResponse{true, "Registered new user", newUser.UserName})
-			access.Unlock()
-		}
-	}
-}
-
-func loginUser(w http.ResponseWriter, r *http.Request) {
-	userName, password, flag :=r.BasicAuth()
-	if isLoggedIn(w, r) == true {
-		w.WriteHeader(http.StatusNotAcceptable)
-		json.NewEncoder(w).Encode(UserResponse{false, "Already logged in", ""})
-		return
-	}
-	if flag == false {
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(UserResponse{false, "Invalid request!", ""})
-	} else {
-		val, found := userList[userName]
-		if found == true && val.Password == password {
-			cookie := http.Cookie{Name: "User", Value: userName, Path: "/"}
-			http.SetCookie(w, &cookie)
-			w.WriteHeader(http.StatusAccepted)
-			json.NewEncoder(w).Encode(UserResponse{true, "Successfully logged in", userName})
-		} else {
-			w.WriteHeader(http.StatusNotAcceptable)
-			json.NewEncoder(w).Encode(UserResponse{false, "Invalid username or password", userName})
-		}
-	}
-}
-
-func logoutUser(w http.ResponseWriter, r *http.Request) {
-	_, err := r.Cookie("User")
-	if err == nil {
-		cookie := http.Cookie{Name: "User", Value: "", Path: "/", Expires: time.Now()}
-		http.SetCookie(w, &cookie)
-		w.WriteHeader(http.StatusAccepted)
-		json.NewEncoder(w).Encode(UserResponse{true, "Logged out", ""})
-	} else {
-		w.WriteHeader(http.StatusNotAcceptable)
-		json.NewEncoder(w).Encode(UserResponse{false, "No active user found", ""})
 	}
 }
 
